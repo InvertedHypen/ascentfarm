@@ -1,0 +1,175 @@
+local Players = game:GetService("Players")
+local ReplicatedStorage = game:GetService("ReplicatedStorage")
+local RunService = game:GetService("RunService")
+local TeleportService = game:GetService("TeleportService")
+local VirtualInputManager = game:GetService("VirtualInputManager")
+local TweenService = game:GetService("TweenService")
+local HttpService = game:GetService("HttpService")
+
+local LocalPlayer = Players.LocalPlayer
+local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
+
+local mobs = {
+	{ name = "EvilCarrot", questId = 21 },
+	{ name = "Sdjkfjsdgha", questId = 20 },
+	{ name = "DemonSlime", questId = 19 }
+}
+local keyList = { "E", "R", "C", "F" }
+
+-- Clean old GUI
+local oldGui = PlayerGui:FindFirstChild("AscendantAutoFarmGUI")
+if oldGui then oldGui:Destroy() end
+
+-- GUI Creation (unchanged, omitted here for brevity)
+-- ... [Your existing GUI creation code here] ...
+
+-- Notification function
+local function showNotification(msg)
+	notification.Text = msg
+	TweenService:Create(notification, TweenInfo.new(0.25), {TextTransparency = 0, BackgroundTransparency = 0.1}):Play()
+	task.wait(2.2)
+	TweenService:Create(notification, TweenInfo.new(0.4), {TextTransparency = 1, BackgroundTransparency = 1}):Play()
+end
+
+-- Press keys function
+local function pressKeys()
+	for _, key in ipairs(keyList) do
+		VirtualInputManager:SendKeyEvent(true, key, false, nil)
+		task.wait(0.03)
+		VirtualInputManager:SendKeyEvent(false, key, false, nil)
+	end
+end
+
+-- Get quest from server
+local function getQuest(id)
+	ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net"):WaitForChild("RE/Quest"):FireServer("GetAscendantQuest", id)
+	showNotification("📜 Quest started!")
+end
+
+-- Teleport your character to a position with sticking logic
+local function stickToTarget(targetCFrame)
+	local char = LocalPlayer.Character
+	if not char then return end
+	local hrp = char:FindFirstChild("HumanoidRootPart")
+	if not hrp then return end
+
+	-- Using RunService to constantly update position, sticking to mob to avoid flinging
+	local connection
+	connection = RunService.Heartbeat:Connect(function()
+		if hrp and targetCFrame then
+			hrp.CFrame = targetCFrame * CFrame.new(0, 2.5, 0)
+		else
+			connection:Disconnect()
+		end
+	end)
+	
+	-- Return connection so caller can disconnect when needed
+	return connection
+end
+
+local function findMob(mobName)
+	local spawn = workspace:FindFirstChild("Spawns") and workspace.Spawns:FindFirstChild(mobName)
+	if spawn and spawn:FindFirstChild(mobName) then
+		local mob = spawn[mobName]
+		if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
+			return mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChildWhichIsA("BasePart")
+		end
+	end
+	return nil
+end
+
+local function updateRespawnTimers()
+	local timers = ReplicatedStorage:FindFirstChild("RespawnTimers")
+	if not timers then return end
+	for _, mob in ipairs(mobs) do
+		local folder = timers:FindFirstChild(mob.name)
+		if folder then
+			local now = workspace:GetServerTimeNow()
+			local startTime = folder:FindFirstChild("StartTime") and folder.StartTime.Value or 0
+			local remainingTime = folder:FindFirstChild("RemainingTime") and folder.RemainingTime.Value or 0
+			local endTime = startTime + remainingTime
+			if now < endTime then
+				local timeLeft = endTime - now
+				local min = math.floor(timeLeft / 60)
+				local sec = math.floor(timeLeft % 60)
+				mobTimers[mob.name].Text = string.format("%s: Respawn in %02d:%02d", mob.name, min, sec)
+			else
+				mobTimers[mob.name].Text = mob.name .. ": Ready!"
+			end
+		else
+			mobTimers[mob.name].Text = mob.name .. ": Unknown"
+		end
+	end
+end
+
+local function serverHop()
+	statusLabel.Text = "Status: Server hopping..."
+	showNotification("Server hopping...")
+	local Servers = {}
+	local success, result = pcall(function()
+		return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+	end)
+	if success then
+		for _, v in pairs(result.data) do
+			if v.playing < v.maxPlayers then
+				table.insert(Servers, v.id)
+			end
+		end
+	end
+	if #Servers > 0 then
+		local selectedServer = Servers[math.random(1, #Servers)]
+		TeleportService:TeleportToPlaceInstance(game.PlaceId, selectedServer, LocalPlayer)
+	end
+end
+
+local function startAutofarm()
+	statusLabel.Text = "Status: Starting autofarm..."
+	task.spawn(function()
+		local stickConnection
+		while true do
+			updateRespawnTimers()
+			local found = false
+			for _, mob in ipairs(mobs) do
+				local target = findMob(mob.name)
+				if target then
+					found = true
+					statusLabel.Text = "Status: Hunting " .. mob.name
+					getQuest(mob.questId)
+					
+					-- Disconnect old stick if exists before creating new one
+					if stickConnection then
+						stickConnection:Disconnect()
+						stickConnection = nil
+					end
+					
+					-- Stick to mob's CFrame
+					stickConnection = stickToTarget(target.CFrame)
+					
+					-- Press keys while stuck
+					pressKeys()
+					task.wait(0.75)
+					break
+				end
+			end
+			if not found then
+				-- Disconnect stick connection before hopping
+				if stickConnection then
+					stickConnection:Disconnect()
+					stickConnection = nil
+				end
+				serverHop()
+				break
+			end
+			task.wait(0.3)
+		end
+	end)
+end
+
+-- Auto execute on teleport (server hop) with queueonteleport
+queueonteleport([[
+	repeat wait() until game:IsLoaded()
+	loadstring(game:HttpGet("YOUR_SCRIPT_RAW_URL_HERE"))()
+]])
+
+-- Start on initial run
+startAutofarm()
