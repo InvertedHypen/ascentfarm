@@ -1,3 +1,5 @@
+-- DISCORD-STYLE ASCENDANT AUTOFARM
+
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -5,7 +7,6 @@ local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
-
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
@@ -14,299 +15,172 @@ local mobs = {
 	{ name = "Sdjkfjsdgha", questId = 20 },
 	{ name = "DemonSlime", questId = 19 }
 }
-local keyList = { "E", "R", "C", "F" }
+local keys = { "E", "R", "C", "F" }
 
--- Clean up old GUI if present
-local oldGui = PlayerGui:FindFirstChild("AscendantAutoFarmGUI")
-if oldGui then oldGui:Destroy() end
-
--- GUI Creation
-local gui = Instance.new("ScreenGui")
-gui.Name = "AscendantAutoFarmGUI"
+-- Create Discord UI
+local gui = Instance.new("ScreenGui", PlayerGui)
+gui.Name = "AscendantAutoFarm_UI"
 gui.ResetOnSpawn = false
-gui.Parent = PlayerGui
 
-local mainFrame = Instance.new("Frame")
-mainFrame.Size = UDim2.new(0, 400, 0, 250)
-mainFrame.Position = UDim2.new(0.5, -200, 0.5, -125)
-mainFrame.BackgroundColor3 = Color3.fromRGB(45, 48, 53)
-mainFrame.BorderSizePixel = 0
-mainFrame.AnchorPoint = Vector2.new(0.5, 0.5)
-mainFrame.Active = true
-mainFrame.Draggable = true
-mainFrame.Parent = gui
+local frame = Instance.new("Frame", gui)
+frame.Size = UDim2.new(0, 320, 0, 200)
+frame.Position = UDim2.new(0, 25, 0.5, -100)
+frame.BackgroundColor3 = Color3.fromRGB(44, 47, 51)
+frame.BorderSizePixel = 0
+frame.Active = true
+frame.Draggable = true
 
-local mainUICorner = Instance.new("UICorner")
-mainUICorner.CornerRadius = UDim.new(0, 12)
-mainUICorner.Parent = mainFrame
+local corner = Instance.new("UICorner", frame)
+corner.CornerRadius = UDim.new(0, 10)
 
-local shadow = Instance.new("Frame")
-shadow.Size = UDim2.new(1, 10, 1, 10)
-shadow.Position = UDim2.new(0, -5, 0, -5)
-shadow.BackgroundColor3 = Color3.new(0, 0, 0)
-shadow.BackgroundTransparency = 0.8
-shadow.ZIndex = 0
-shadow.BorderSizePixel = 0
-shadow.ClipsDescendants = true
-shadow.Parent = mainFrame
+local header = Instance.new("TextLabel", frame)
+header.Size = UDim2.new(1, 0, 0, 30)
+header.BackgroundTransparency = 1
+header.Text = "Ascendant AutoFarm 💻"
+header.Font = Enum.Font.Code
+header.TextColor3 = Color3.fromRGB(220, 220, 220)
+header.TextSize = 18
 
-local shadowCorner = Instance.new("UICorner")
-shadowCorner.CornerRadius = UDim.new(0, 14)
-shadowCorner.Parent = shadow
-
--- Sidebar
-local sidebar = Instance.new("Frame")
-sidebar.Size = UDim2.new(0, 120, 1, 0)
-sidebar.BackgroundColor3 = Color3.fromRGB(39, 41, 45)
-sidebar.BorderSizePixel = 0
-sidebar.Parent = mainFrame
-
-local sidebarCorner = Instance.new("UICorner")
-sidebarCorner.CornerRadius = UDim.new(0, 12)
-sidebarCorner.Parent = sidebar
-
-local title = Instance.new("TextLabel")
-title.Size = UDim2.new(1, -20, 0, 60)
-title.Position = UDim2.new(0, 10, 0, 10)
-title.BackgroundTransparency = 1
-title.Text = "LoliSex"
-title.TextColor3 = Color3.fromRGB(255, 255, 255)
-title.Font = Enum.Font.GothamBold
-title.TextSize = 22
-title.TextWrapped = true
-title.TextYAlignment = Enum.TextYAlignment.Top
-title.Parent = sidebar
-
-local statusLabel = Instance.new("TextLabel")
-statusLabel.Size = UDim2.new(1, -20, 0, 22)
-statusLabel.Position = UDim2.new(0, 10, 0, 78)
-statusLabel.BackgroundTransparency = 1
-statusLabel.TextColor3 = Color3.fromRGB(150, 153, 160)
-statusLabel.Font = Enum.Font.Gotham
-statusLabel.TextSize = 14
-statusLabel.Text = "Status: Initializing..."
-statusLabel.TextWrapped = true
-statusLabel.Parent = sidebar
-
--- Main Content
-local contentFrame = Instance.new("Frame")
-contentFrame.Size = UDim2.new(1, -130, 1, -20)
-contentFrame.Position = UDim2.new(0, 125, 0, 10)
-contentFrame.BackgroundTransparency = 1
-contentFrame.Parent = mainFrame
-
-local contentTitle = Instance.new("TextLabel")
-contentTitle.Size = UDim2.new(1, 0, 0, 28)
-contentTitle.Position = UDim2.new(0, 0, 0, 0)
-contentTitle.BackgroundTransparency = 1
-contentTitle.TextColor3 = Color3.fromRGB(255, 255, 255)
-contentTitle.Font = Enum.Font.GothamBold
-contentTitle.TextSize = 18
-contentTitle.Text = "Mob Respawn Timers"
-contentTitle.Parent = contentFrame
+local status = Instance.new("TextLabel", frame)
+status.Size = UDim2.new(1, -20, 0, 24)
+status.Position = UDim2.new(0, 10, 0, 35)
+status.BackgroundTransparency = 1
+status.Text = "Status: Starting..."
+status.Font = Enum.Font.Code
+status.TextColor3 = Color3.fromRGB(160, 160, 160)
+status.TextSize = 14
+status.TextXAlignment = Enum.TextXAlignment.Left
 
 local mobTimers = {}
 for i, mob in ipairs(mobs) do
-	local lbl = Instance.new("TextLabel")
-	lbl.Size = UDim2.new(1, -10, 0, 24)
-	lbl.Position = UDim2.new(0, 5, 0, 32 + (i - 1) * 28)
+	local lbl = Instance.new("TextLabel", frame)
+	lbl.Size = UDim2.new(1, -20, 0, 20)
+	lbl.Position = UDim2.new(0, 10, 0, 60 + (i - 1) * 22)
 	lbl.BackgroundTransparency = 1
-	lbl.TextColor3 = Color3.fromRGB(200, 202, 207)
-	lbl.Font = Enum.Font.Gotham
+	lbl.Text = mob.name .. ": Waiting..."
+	lbl.Font = Enum.Font.Code
+	lbl.TextColor3 = Color3.fromRGB(200, 200, 200)
 	lbl.TextSize = 14
 	lbl.TextXAlignment = Enum.TextXAlignment.Left
-	lbl.Text = mob.name .. ": Loading..."
-	lbl.Parent = contentFrame
 	mobTimers[mob.name] = lbl
 end
 
--- Notification Label
-local notification = Instance.new("TextLabel")
-notification.Size = UDim2.new(1, -20, 0, 28)
-notification.Position = UDim2.new(0, 10, 1, -38)
-notification.BackgroundColor3 = Color3.fromRGB(67, 181, 129)
-notification.TextColor3 = Color3.fromRGB(255, 255, 255)
-notification.Font = Enum.Font.GothamBold
-notification.TextSize = 16
-notification.Text = ""
-notification.TextTransparency = 1
-notification.BackgroundTransparency = 1
-notification.TextStrokeTransparency = 0.85
-notification.Parent = mainFrame
-
-local notificationCorner = Instance.new("UICorner")
-notificationCorner.CornerRadius = UDim.new(0, 6)
-notificationCorner.Parent = notification
-
-local function showNotification(msg)
-	notification.Text = msg
-	TweenService:Create(notification, TweenInfo.new(0.25), {TextTransparency = 0, BackgroundTransparency = 0.1}):Play()
-	task.wait(2.2)
-	TweenService:Create(notification, TweenInfo.new(0.4), {TextTransparency = 1, BackgroundTransparency = 1}):Play()
+-- UTILITIES
+local function showStatus(msg)
+	status.Text = "Status: " .. msg
 end
 
 local function pressKeys()
-	for _, key in ipairs(keyList) do
+	for _, key in ipairs(keys) do
 		VirtualInputManager:SendKeyEvent(true, key, false, nil)
-		task.wait(0.03)
+		task.wait(0.02)
 		VirtualInputManager:SendKeyEvent(false, key, false, nil)
 	end
 end
 
 local function getQuest(id)
-	ReplicatedStorage:WaitForChild("Modules"):WaitForChild("Net"):WaitForChild("RE/Quest"):FireServer("GetAscendantQuest", id)
-	showNotification("📜 Quest started!")
+	ReplicatedStorage.Modules.Net["RE/Quest"]:FireServer("GetAscendantQuest", id)
 end
 
-local function teleportTo(target)
+local function weldToMob(mob)
 	local char = LocalPlayer.Character
-	if char and char:FindFirstChild("HumanoidRootPart") and target then
-		char.HumanoidRootPart.CFrame = target.CFrame + Vector3.new(0, 2.5, 0)
-	end
+	if not char or not char:FindFirstChild("HumanoidRootPart") then return end
+	local hrp = char.HumanoidRootPart
+
+	local weld = Instance.new("WeldConstraint")
+	weld.Part0 = hrp
+	weld.Part1 = mob
+	weld.Parent = hrp
+	hrp.Anchored = false
+	hrp.AssemblyLinearVelocity = Vector3.zero
 end
 
 local function findMob(mobName)
-	local spawn = workspace:FindFirstChild("Spawns") and workspace.Spawns:FindFirstChild(mobName)
+	local spawn = workspace:FindFirstChild("Spawns"):FindFirstChild(mobName)
 	if spawn and spawn:FindFirstChild(mobName) then
 		local mob = spawn[mobName]
 		if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
-			return mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChildWhichIsA("BasePart"), mob
+			return mob:FindFirstChild("HumanoidRootPart") or mob:FindFirstChildWhichIsA("BasePart")
 		end
 	end
-	return nil, nil
+	return nil
 end
 
-local function updateRespawnTimers()
-	local timers = ReplicatedStorage:FindFirstChild("RespawnTimers")
-	if not timers then return end
+local function updateTimers()
+	local timers = ReplicatedStorage:WaitForChild("RespawnTimers")
 	for _, mob in ipairs(mobs) do
 		local folder = timers:FindFirstChild(mob.name)
 		if folder then
 			local now = workspace:GetServerTimeNow()
-			local startTime = folder:FindFirstChild("StartTime") and folder.StartTime.Value or 0
-			local remainingTime = folder:FindFirstChild("RemainingTime") and folder.RemainingTime.Value or 0
-			local endTime = startTime + remainingTime
+			local start = folder:FindFirstChild("StartTime") and folder.StartTime.Value or 0
+			local remain = folder:FindFirstChild("RemainingTime") and folder.RemainingTime.Value or 0
+			local endTime = start + remain
 			if now < endTime then
-				local timeLeft = endTime - now
-				local min = math.floor(timeLeft / 60)
-				local sec = math.floor(timeLeft % 60)
-				mobTimers[mob.name].Text = string.format("%s: Respawn in %02d:%02d", mob.name, min, sec)
+				local left = endTime - now
+				local m = math.floor(left / 60)
+				local s = math.floor(left % 60)
+				mobTimers[mob.name].Text = string.format("%s: %02d:%02d", mob.name, m, s)
 			else
-				mobTimers[mob.name].Text = mob.name .. ": Ready!"
+				mobTimers[mob.name].Text = mob.name .. ": Ready"
 			end
-		else
-			mobTimers[mob.name].Text = mob.name .. ": Unknown"
 		end
 	end
 end
 
 local function serverHop()
-	statusLabel.Text = "Status: Server hopping..."
-	showNotification("Server hopping...")
-	local Servers = {}
-	local success, result = pcall(function()
+	showStatus("Server hopping...")
+	local servers = {}
+	local ok, result = pcall(function()
 		return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
 	end)
-	if success and result and result.data then
-		for _, server in ipairs(result.data) do
-			if server.playing < server.maxPlayers and server.id ~= game.JobId then
-				table.insert(Servers, server.id)
+	if ok and result and result.data then
+		for _, v in ipairs(result.data) do
+			if v.playing < v.maxPlayers then
+				table.insert(servers, v.id)
 			end
 		end
 	end
-	if #Servers > 0 then
-		local serverId = Servers[math.random(#Servers)]
-		TeleportService:TeleportToPlaceInstance(game.PlaceId, serverId, LocalPlayer)
+	if #servers > 0 then
+		local chosen = servers[math.random(1, #servers)]
+		TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen, LocalPlayer)
 	end
 end
 
--- Auto farm logic with sticking to one mob
-local farmingMob = nil
-local farmingMobPart = nil
-local farmingMobObj = nil
-
-local function startFarming()
-	spawn(function()
-		while true do
-			task.wait(0.1)
-			if not farmingMob then
-				-- Find a mob to farm according to priority
-				for _, mob in ipairs(mobs) do
-					local mobPart, mobObj = findMob(mob.name)
-					if mobPart then
-						farmingMob = mob
-						farmingMobPart = mobPart
-						farmingMobObj = mobObj
-						getQuest(mob.questId)
-						showNotification("Farming mob: " .. mob.name)
-						break
-					end
-				end
-			end
-
-			if farmingMob and farmingMobPart and farmingMobObj and farmingMobObj:FindFirstChild("Humanoid") then
-				local humanoid = farmingMobObj.Humanoid
-				if humanoid.Health <= 0 then
-					-- Mob died, reset target
-					farmingMob = nil
-					farmingMobPart = nil
-					farmingMobObj = nil
-					statusLabel.Text = "Status: Waiting for next mob..."
-					showNotification("Mob defeated, searching next...")
-					task.wait(2)
-				else
-					-- Teleport close to mob and attack
-					teleportTo(farmingMobPart)
-					pressKeys()
-					statusLabel.Text = "Status: Farming " .. farmingMob.name .. " (HP: " .. math.floor(humanoid.Health) .. ")"
-				end
-			else
-				farmingMob = nil
-				farmingMobPart = nil
-				farmingMobObj = nil
-				statusLabel.Text = "Status: No mobs found"
-				task.wait(3)
+local function autoFarm()
+	while true do
+		updateTimers()
+		local found = false
+		for _, mob in ipairs(mobs) do
+			local mobPart = findMob(mob.name)
+			if mobPart then
+				showStatus("Fighting " .. mob.name)
+				getQuest(mob.questId)
+				task.wait(0.2)
+				LocalPlayer.Character:WaitForChild("HumanoidRootPart").CFrame = mobPart.CFrame
+				weldToMob(mobPart)
+				pressKeys()
+				found = true
+				break
 			end
 		end
-	end)
+		if not found then
+			showStatus("No mobs. Switching...")
+			task.wait(1.5)
+			serverHop()
+			break
+		end
+		task.wait(0.3)
+	end
 end
 
--- Automatically re-execute script on server hop
-local function autoReexecute()
-	local scriptSource = [[
-		local httpService = game:GetService("HttpService")
-		local Players = game:GetService("Players")
-		local ReplicatedStorage = game:GetService("ReplicatedStorage")
-		local RunService = game:GetService("RunService")
-		local VirtualInputManager = game:GetService("VirtualInputManager")
-		local TweenService = game:GetService("TweenService")
-		local TeleportService = game:GetService("TeleportService")
-		local LocalPlayer = Players.LocalPlayer
+-- GO
+showStatus("Initializing...")
+task.wait(1)
+autoFarm()
 
-		-- The full main script would go here but since this is just the reload trigger,
-		-- we just queue this loadstring to run on teleport.
-
-		-- Using queue_on_teleport to re-execute the script after teleport:
-		queue_on_teleport([[
-			loadstring(game:HttpGet("YOUR_SCRIPT_RAW_URL"))()
-		]])
-	]]
-
-	-- Replace "YOUR_SCRIPT_RAW_URL" with the actual URL of your raw script for auto execution.
-	-- Since you run it locally, we do the queueOnTeleport with your script content.
-
-	queue_on_teleport(game:HttpGet("YOUR_SCRIPT_RAW_URL"))
+-- AUTO EXECUTION FOR SERVERHOP:
+if queue_on_teleport then
+	queue_on_teleport([[
+	loadstring(game:HttpGet("https://pastebin.com/raw/XS5wWe4A"))()
+	]])
 end
-
--- You have to replace "YOUR_SCRIPT_RAW_URL" with your own uploaded raw script URL if you want auto re-execute on server hop.
-
--- Start farming
-startFarming()
-
--- Update timers every second
-RunService.Heartbeat:Connect(function()
-	updateRespawnTimers()
-end)
-
--- Show initial notification
-showNotification("Ascendant AutoFarm started")
