@@ -1,5 +1,3 @@
--- DISCORD-STYLE ASCENDANT AUTOFARM
-
 local Players = game:GetService("Players")
 local ReplicatedStorage = game:GetService("ReplicatedStorage")
 local RunService = game:GetService("RunService")
@@ -7,6 +5,7 @@ local TeleportService = game:GetService("TeleportService")
 local VirtualInputManager = game:GetService("VirtualInputManager")
 local TweenService = game:GetService("TweenService")
 local HttpService = game:GetService("HttpService")
+
 local LocalPlayer = Players.LocalPlayer
 local PlayerGui = LocalPlayer:WaitForChild("PlayerGui")
 
@@ -17,10 +16,36 @@ local mobs = {
 }
 local keys = { "E", "R", "C", "F" }
 
--- Create Discord UI
+-- === LOADING SCREEN ===
+local loadingGui = Instance.new("ScreenGui", PlayerGui)
+loadingGui.Name = "AscendantAutoFarm_Loading"
+loadingGui.ResetOnSpawn = false
+
+local loadingFrame = Instance.new("Frame", loadingGui)
+loadingFrame.Size = UDim2.new(0, 300, 0, 100)
+loadingFrame.Position = UDim2.new(0.5, -150, 0.5, -50)
+loadingFrame.BackgroundColor3 = Color3.fromRGB(44, 47, 51)
+loadingFrame.BorderSizePixel = 0
+loadingFrame.Active = true
+loadingFrame.Draggable = true
+
+local loadingCorner = Instance.new("UICorner", loadingFrame)
+loadingCorner.CornerRadius = UDim.new(0, 10)
+
+local loadingText = Instance.new("TextLabel", loadingFrame)
+loadingText.Size = UDim2.new(1, 0, 1, 0)
+loadingText.BackgroundTransparency = 1
+loadingText.Text = "Loading... Please wait"
+loadingText.Font = Enum.Font.Code
+loadingText.TextColor3 = Color3.fromRGB(220, 220, 220)
+loadingText.TextSize = 18
+loadingText.TextWrapped = true
+
+-- === MAIN UI ===
 local gui = Instance.new("ScreenGui", PlayerGui)
 gui.Name = "AscendantAutoFarm_UI"
 gui.ResetOnSpawn = false
+gui.Enabled = false  -- Hide main UI initially until loading done
 
 local frame = Instance.new("Frame", gui)
 frame.Size = UDim2.new(0, 320, 0, 200)
@@ -96,7 +121,7 @@ local function weldToMob(mob)
 end
 
 local function findMob(mobName)
-	local spawn = workspace:FindFirstChild("Spawns"):FindFirstChild(mobName)
+	local spawn = workspace:FindFirstChild("Spawns") and workspace.Spawns:FindFirstChild(mobName)
 	if spawn and spawn:FindFirstChild(mobName) then
 		local mob = spawn[mobName]
 		if mob:FindFirstChild("Humanoid") and mob.Humanoid.Health > 0 then
@@ -122,65 +147,127 @@ local function updateTimers()
 				mobTimers[mob.name].Text = string.format("%s: %02d:%02d", mob.name, m, s)
 			else
 				mobTimers[mob.name].Text = mob.name .. ": Ready"
+                
 			end
 		end
 	end
 end
 
+task.spawn(function()
+	while true do
+		pcall(updateTimers)
+		task.wait(0.2) -- update 5 times per second (0.2 sec interval)
+	end
+end)
+
+
 local function serverHop()
-	showStatus("Server hopping...")
-	local servers = {}
-	local ok, result = pcall(function()
-		return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
-	end)
-	if ok and result and result.data then
-		for _, v in ipairs(result.data) do
-			if v.playing < v.maxPlayers then
-				table.insert(servers, v.id)
-			end
-		end
-	end
-	if #servers > 0 then
-		local chosen = servers[math.random(1, #servers)]
-		TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen, LocalPlayer)
-	end
+    showStatus("Server hopping...")
+
+    while true do
+        local servers = {}
+        local ok, result = pcall(function()
+            return HttpService:JSONDecode(game:HttpGet("https://games.roblox.com/v1/games/" .. game.PlaceId .. "/servers/Public?sortOrder=Asc&limit=100"))
+        end)
+
+        if ok and result and result.data then
+            for _, v in ipairs(result.data) do
+                if v.playing < v.maxPlayers then
+                    table.insert(servers, v.id)
+                end
+            end
+        end
+
+        if #servers > 0 then
+            local chosen = servers[math.random(1, #servers)]
+
+            if queue_on_teleport then
+                queue_on_teleport([[
+                    loadstring(game:HttpGet("https://raw.githubusercontent.com/InvertedHypen/ascentfarm/refs/heads/main/farm"))()
+                ]])
+            end
+
+            TeleportService:TeleportToPlaceInstance(game.PlaceId, chosen, LocalPlayer)
+            return -- successful teleport, exit the function
+        else
+            showStatus("No suitable servers found. Retrying...")
+            task.wait(5) -- wait 5 seconds before retrying
+        end
+    end
 end
 
 local function autoFarm()
 	while true do
 		updateTimers()
 		local found = false
+
 		for _, mob in ipairs(mobs) do
+			showStatus("Getting quest for " .. mob.name)
+			getQuest(mob.questId)
+			task.wait(1) -- wait 1 second to let the server register the quest
+
 			local mobPart = findMob(mob.name)
 			if mobPart then
 				showStatus("Fighting " .. mob.name)
-				getQuest(mob.questId)
-				task.wait(0.2)
-				LocalPlayer.Character:WaitForChild("HumanoidRootPart").CFrame = mobPart.CFrame
+
+				local hrp = LocalPlayer.Character and LocalPlayer.Character:FindFirstChild("HumanoidRootPart")
+				if not hrp then
+					showStatus("Missing HumanoidRootPart.")
+					serverHop()
+					return
+				end
+
+				hrp.CFrame = mobPart.CFrame
 				weldToMob(mobPart)
-				pressKeys()
+
+				local humanoid = mobPart.Parent:FindFirstChildOfClass("Humanoid")
+				local died = false
+				local deathConn = humanoid and humanoid.Died:Connect(function()
+					died = true
+				end)
+
+				local attempts = 0
+				local maxAttempts = 50
+				while attempts < maxAttempts and humanoid and humanoid.Health > 0 and not died do
+					pressKeys()
+					task.wait(0.3)
+					attempts += 1
+				end
+
+				if deathConn then deathConn:Disconnect() end
+
+				if died then
+					showStatus("Killed " .. mob.name)
+				else
+					showStatus("Failed to kill " .. mob.name)
+					task.wait(1)
+					serverHop()
+					return
+				end
+
 				found = true
 				break
 			end
 		end
+
 		if not found then
-			showStatus("No mobs. Switching...")
+			showStatus("No mobs found. Hopping...")
 			task.wait(1.5)
 			serverHop()
 			break
 		end
+
 		task.wait(0.3)
 	end
 end
 
--- GO
-showStatus("Initializing...")
-task.wait(1)
-autoFarm()
+-- MAIN EXECUTION FLOW --
 
--- AUTO EXECUTION FOR SERVERHOP:
-if queue_on_teleport then
-	queue_on_teleport([[
-	loadstring(game:HttpGet("https://pastebin.com/raw/XS5wWe4A"))()
-	]])
-end
+showStatus("Initializing...")
+
+-- Wait 5 seconds for server to stabilize before hiding loading and showing UI
+task.delay(6, function()
+	loadingGui.Enabled = false
+	gui.Enabled = true
+	autoFarm()
+end)
